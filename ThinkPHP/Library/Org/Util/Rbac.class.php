@@ -16,291 +16,314 @@ use Think\Db;
  * 基于角色的数据库方式验证类
  */
 // 配置文件增加设置
-// USER_AUTH_ON 是否需要认证
-// USER_AUTH_TYPE 认证类型
-// USER_AUTH_KEY 认证识别号
-// REQUIRE_AUTH_MODULE  需要认证模块
-// NOT_AUTH_MODULE 无需认证模块
-// USER_AUTH_GATEWAY 认证网关
+// RBAC_AUTH_ON 是否需要认证
+// RBAC_AUTH_TYPE 认证类型
+// RBAC_SESSION_KEY 保存RBAC类的SESSION标记
+// RBAC_CHECK_MODULE  需要认证模块
+// RBAC_ALLOW_MODULE 无需认证模块
 // RBAC_DB_DSN  数据库连接DSN
 // RBAC_ROLE_TABLE 角色表名称
-// RBAC_USER_TABLE 用户表名称
+// RBAC_USER_TABLE 用户角色关系表名称
 // RBAC_ACCESS_TABLE 权限表名称
 // RBAC_NODE_TABLE 节点表名称
 /*
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `think_access` (
-`role_id` smallint(6) unsigned NOT NULL,
-`node_id` smallint(6) unsigned NOT NULL,
-`level` tinyint(1) NOT NULL,
-`module` varchar(50) DEFAULT NULL,
-KEY `groupId` (`role_id`),
-KEY `nodeId` (`node_id`)
+  `role_id` smallint(6) unsigned NOT NULL,
+  `node_id` smallint(6) unsigned NOT NULL,
+  `level` tinyint(1) NOT NULL,
+  `module` varchar(50) DEFAULT NULL,
+  KEY `groupId` (`role_id`),
+  KEY `nodeId` (`node_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 CREATE TABLE IF NOT EXISTS `think_node` (
-`id` smallint(6) unsigned NOT NULL AUTO_INCREMENT,
-`name` varchar(20) NOT NULL,
-`title` varchar(50) DEFAULT NULL,
-`status` tinyint(1) DEFAULT '0',
-`remark` varchar(255) DEFAULT NULL,
-`sort` smallint(6) unsigned DEFAULT NULL,
-`pid` smallint(6) unsigned NOT NULL,
-`level` tinyint(1) unsigned NOT NULL,
-PRIMARY KEY (`id`),
-KEY `level` (`level`),
-KEY `pid` (`pid`),
-KEY `status` (`status`),
-KEY `name` (`name`)
+  `id` smallint(6) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(20) NOT NULL,
+  `title` varchar(50) DEFAULT NULL,
+  `status` tinyint(1) DEFAULT '0',
+  `remark` varchar(255) DEFAULT NULL,
+  `sort` smallint(6) unsigned DEFAULT NULL,
+  `pid` smallint(6) unsigned NOT NULL,
+  `level` tinyint(1) unsigned NOT NULL,
+  `expression` varchar(500) DEFAULT '',
+  PRIMARY KEY (`id`),
+  KEY `level` (`level`),
+  KEY `pid` (`pid`),
+  KEY `status` (`status`),
+  KEY `name` (`name`)
 ) ENGINE=MyISAM  DEFAULT CHARSET=utf8;
 
 CREATE TABLE IF NOT EXISTS `think_role` (
-`id` smallint(6) unsigned NOT NULL AUTO_INCREMENT,
-`name` varchar(20) NOT NULL,
-`pid` smallint(6) DEFAULT NULL,
-`status` tinyint(1) unsigned DEFAULT NULL,
-`remark` varchar(255) DEFAULT NULL,
-PRIMARY KEY (`id`),
-KEY `pid` (`pid`),
-KEY `status` (`status`)
+  `id` smallint(6) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(20) NOT NULL,
+  `pid` smallint(6) DEFAULT NULL,
+  `status` tinyint(1) unsigned DEFAULT NULL,
+  `remark` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `pid` (`pid`),
+  KEY `status` (`status`)
 ) ENGINE=MyISAM  DEFAULT CHARSET=utf8 ;
 
 CREATE TABLE IF NOT EXISTS `think_role_user` (
-`role_id` mediumint(9) unsigned DEFAULT NULL,
-`user_id` char(32) DEFAULT NULL,
-KEY `group_id` (`role_id`),
-KEY `user_id` (`user_id`)
+  `role_id` smallint(6) unsigned DEFAULT NULL,
+  `user_id` int(10) unsigned DEFAULT NULL,
+  KEY `group_id` (`role_id`),
+  KEY `user_id` (`user_id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
- */
+*/
+
 class Rbac
 {
-    // 认证方法
-    public static function authenticate($map, $model = '')
+    // 默认配置
+    private $config = array(
+        'RBAC_AUTH_ON'      => true, // 是否开启权限认证
+        'RBAC_AUTH_TYPE'    => 1, // 默认认证类型 1:登录认证 2:实时认证
+        'RBAC_SESSION_KEY'  => 'RBAC', // 保存RBAC类的SESSION标记
+        'RBAC_CHECK_MODULE' => '', // 需要认证模块
+        'RBAC_ALLOW_MODULE' => '', // 无需认证模块
+        'RBAC_DB_DSN'       => '',  // 数据库连接DSN
+        'RBAC_ROLE_TABLE'   => 'role', // 角色表名称
+        'RBAC_USER_TABLE'   => 'role_user', // 用户表名称
+        'RBAC_ACCESS_TABLE' => 'access', // 权限表名称
+        'RBAC_NODE_TABLE'   => 'node', // 节点表名称
+    );
+    private $administrator = false; // 是否为超级管理员
+    private $authId = 0; // 用户id
+    private $accessList = null; // 权限列表
+
+    // 保存类实例的静态成员变量
+    private static $instance;
+
+    /**
+     * 构造函数为private,防止创建对象
+     * @param integer $authId 用户id
+     * @param boolean $admin 是否为超管
+     * @param array $config 配置参数
+     */
+    private function __construct($authId, $admin = false, $config = null)
     {
-        if (empty($model)) {
-            $model = C('USER_AUTH_MODEL');
-        }
-
-        //使用给定的Map进行认证
-        return M($model)->where($map)->find();
-    }
-
-    //用于检测用户权限的方法,并保存到Session中
-    public static function saveAccessList($authId = null)
-    {
-        if (null === $authId) {
-            $authId = $_SESSION[C('USER_AUTH_KEY')];
-        }
-
-        // 如果使用普通权限模式，保存当前用户的访问权限列表
-        // 对管理员开发所有权限
-        if (C('USER_AUTH_TYPE') != 2 && !$_SESSION[C('ADMIN_AUTH_KEY')]) {
-            $_SESSION['_ACCESS_LIST'] = self::getAccessList($authId);
-        }
-
-        return;
-    }
-
-    // 取得模块的所属记录访问权限列表 返回有权限的记录ID数组
-    public static function getRecordAccessList($authId = null, $module = '')
-    {
-        if (null === $authId) {
-            $authId = $_SESSION[C('USER_AUTH_KEY')];
-        }
-
-        if (empty($module)) {
-            $module = CONTROLLER_NAME;
-        }
-
-        //获取权限访问列表
-        $accessList = self::getModuleAccessList($authId, $module);
-        return $accessList;
-    }
-
-    //检查当前操作是否需要认证
-    public static function checkAccess()
-    {
-        //如果项目要求认证，并且当前模块需要认证，则进行权限认证
-        if (C('USER_AUTH_ON')) {
-            $_module = array();
-            $_action = array();
-            if ("" != C('REQUIRE_AUTH_MODULE')) {
-                //需要认证的模块
-                $_module['yes'] = explode(',', strtoupper(C('REQUIRE_AUTH_MODULE')));
-            } else {
-                //无需认证的模块
-                $_module['no'] = explode(',', strtoupper(C('NOT_AUTH_MODULE')));
+        $keys = array_keys($this->config);
+        if (!empty($config) && is_array($config)) {
+            foreach ($keys as $key) {
+                if (isset($config[$key])) {
+                    $this->config[$key] = $config[$key];
+                }
             }
-            //检查当前模块是否需要认证
-            if ((!empty($_module['no']) && !in_array(strtoupper(CONTROLLER_NAME), $_module['no'])) || (!empty($_module['yes']) && in_array(strtoupper(CONTROLLER_NAME), $_module['yes']))) {
-                if ("" != C('REQUIRE_AUTH_ACTION')) {
-                    //需要认证的操作
-                    $_action['yes'] = explode(',', strtoupper(C('REQUIRE_AUTH_ACTION')));
-                } else {
-                    //无需认证的操作
-                    $_action['no'] = explode(',', strtoupper(C('NOT_AUTH_ACTION')));
+        } else {
+            foreach ($keys as $key) {
+                if (!is_null(C($key))) {
+                    $this->config[$key] = C($key);
                 }
-                //检查当前操作是否需要认证
-                if ((!empty($_action['no']) && !in_array(strtoupper(ACTION_NAME), $_action['no'])) || (!empty($_action['yes']) && in_array(strtoupper(ACTION_NAME), $_action['yes']))) {
+            }
+        }
+        $this->config['RBAC_CHECK_MODULE'] = is_array($this->config['RBAC_CHECK_MODULE']) ? array_map('strtoupper', $this->config['RBAC_CHECK_MODULE']) : explode(',', strtoupper($this->config['RBAC_CHECK_MODULE']));
+        $this->config['RBAC_ALLOW_MODULE'] = is_array($this->config['RBAC_ALLOW_MODULE']) ? array_map('strtoupper', $this->config['RBAC_ALLOW_MODULE']) : explode(',', strtoupper($this->config['RBAC_ALLOW_MODULE']));
+
+        is_numeric($authId) && $this->authId = intval($authId);
+        $this->administrator = $admin;
+        // 如果不是超级用户并开启了验证
+        if (!$this->administrator && $this->config['RBAC_AUTH_ON']) {
+            // 如果不是实时验证，保存当前用户的访问权限列表
+            if ($this->config['RBAC_AUTH_TYPE'] != 2 || !isset($this->accessList)) {
+                $this->accessList = $this->getAccessList($authId);
+            }
+        }
+    }
+
+    /**
+     * 类初始化
+     * @param integer $authId 用户id
+     * @param boolean $admin 是否为超管
+     * @param array $config 配置参数
+     * @return class
+     */
+    public static function getInstance($authId, $admin = false, $config = null)
+    {
+        if (empty($config)) {
+            $config = C('RBAC_CONFIG');
+        }
+        if (!empty($config['RBAC_SESSION_KEY'])) {
+            $name = $config['RBAC_SESSION_KEY'];
+        } else {
+            $name = C('RBAC_SESSION_KEY') ?: 'RBAC';
+        }
+        if (!isset($_SESSION[$name]) && !(self::$instance instanceof self)) {
+            $_SESSION[$name] = self::$instance = new self($authId, $admin, $config);
+        } else {
+            self::$instance = $_SESSION[$name];
+            self::$instance->administrator = $admin;
+        }
+        return self::$instance;
+    }
+
+    // 防止对象被复制
+    public function __clone()
+    {
+        trigger_error('Clone is not allow!', E_USER_ERROR);
+    }
+
+    /**
+     * 权限认证
+     * @param string $action 模块/控制器/方法 或者自定义的规则名
+     * @param integer $type 认证模式 1登录 2实时
+     * @param string $relation 多条件间关系
+     * @param array $replace 用于替换条件参数
+     * @return boolean
+     */
+    public function check($action = NULL, $type = 1, $relation = 'and', $replace = array())
+    {
+        // 如果关闭了认证或为超级管理员
+        if (!$this->config['RBAC_AUTH_ON'] || $this->administrator) {
+            return true;
+        }
+        // 默认为:模块/控制器/方法
+        if (is_null($action) || substr_count($action, '/') >= 2) {
+            $action = is_null($action) ? array(MODULE_NAME, CONTROLLER_NAME, ACTION_NAME) : explode('/', $action);
+            $action = array_map('strtoupper', $action);
+            // 如果模块需要认证
+            if ($this->checkModule($action)) {
+                // 即时验证模式
+                if ($type == 2 || $this->config['RBAC_AUTH_TYPE'] == 2 || !isset($this->accessList)) {
+                    $map = " and ((node.level=1 and node.name='{$action[0]}')";
+                    $map .= " or (node.level=2 and node.name='{$action[1]}')";
+                    $map .= " or (node.level=3 and node.name='{$action[2]}'))";
+                    // 从数据库中读取
+                    $this->accessList = $this->getAccessList($this->authId, $map);
+                }
+                // 进行权限验证
+                if (isset($this->accessList[$action[0]][$action[1]][$action[2]])) {
                     return true;
-                } else {
-                    return false;
                 }
-            } else {
-                return false;
+            }
+        } else { // 自定义规则
+            $relation = strtolower($relation);
+            if (is_string($action)) {
+                // 如果有多个规则
+                if (false !== strpos($action, ',')) {
+                    $action = explode(',', $action);
+                } else {
+                    $action = array($action);
+                }
+            }
+            // 需要认证的规则
+            if ($list = array_diff($action, $this->config['RBAC_ALLOW_MODULE'])) {
+                // 如果条件为or则只要有一个规则不需要认正就通过
+                if ($relation == 'or' || count($list) < count($action)) {
+                    return true;
+                }
+                // 即时验证模式
+                if ($type == 2 || $this->config['RBAC_AUTH_TYPE'] == 2 || !isset($this->accessList)) {
+                    $map = ' and node.level=0';
+                    $map .= count($list) == 1 ? " and node.name='{$list[0]}'" : " and node.name in('" . implode("','", $list) . "')";
+                    // 从数据库中读取
+                    $this->accessList = $this->getAccessList($this->authId, $map);
+                }
+                $flag = array();
+                foreach ($list as $name) {
+                    // 检查每个规则的权限
+                    if (isset($this->accessList[$name])) {
+                        // 带有附加的条件
+                        if (!empty($this->accessList[$name])) {
+                            $condition = $this->accessList[$name];
+                            if ($replace && is_array($replace)) {
+                                // 参数替换
+                                foreach ($replace as $k => $v) {
+                                    $condition = str_replace('{' . $k . '}', $v, $condition);
+                                }
+                            }
+                            if (false === strpos(';', $condition)) {
+                                @(eval("\$val=(" . $condition . ");"));
+                                if (!empty($val) && $relation == 'or') {
+                                    return true;
+                                }
+                                $flag[] = $val;
+                            }
+                        } else {
+                            // 只要满足一个规则就直接通过
+                            if ($relation == 'or') {
+                                return true;
+                            }
+                            $flag[] = true;
+                        }
+                    } else {
+                        $flag[] = false;
+                    }
+                }
+                // 条件为and时需要满足所有规则
+                if (!empty($flag) && !in_array(false, $flag)) {
+                    return true;
+                }
             }
         }
         return false;
     }
 
-    // 登录检查
-    public static function checkLogin()
+    /**
+     * 检查模块是否需要认证
+     * @param string $action 模块/控制器/方法
+     * @return boolean
+     */
+    private function checkModule($action)
     {
-        //检查当前操作是否需要认证
-        if (self::checkAccess()) {
-            //检查认证识别号
-            if (!$_SESSION[C('USER_AUTH_KEY')]) {
-                if (C('GUEST_AUTH_ON')) {
-                    // 开启游客授权访问
-                    if (!isset($_SESSION['_ACCESS_LIST']))
-                    // 保存游客权限
-                    {
-                        self::saveAccessList(C('GUEST_AUTH_ID'));
-                    }
-
-                } else {
-                    // 禁止游客访问跳转到认证网关
-                    redirect(PHP_FILE . C('USER_AUTH_GATEWAY'));
-                }
-            }
+        $action[2] = implode('/', $action);
+        $action[1] = $action[0] . '/' . $action[1];
+        if ((!empty($this->config['RBAC_CHECK_MODULE']) && array_intersect($action, $this->config['RBAC_CHECK_MODULE'])) || (!empty($this->config['RBAC_ALLOW_MODULE']) && !array_intersect($action, $this->config['RBAC_ALLOW_MODULE']))) {
+            return true;
+        } else {
+            return false;
         }
-        return true;
-    }
-
-    //权限认证的过滤器方法
-    public static function AccessDecision($appName = MODULE_NAME)
-    {
-        //检查是否需要认证
-        if (self::checkAccess()) {
-            //存在认证识别号，则进行进一步的访问决策
-            $accessGuid = md5($appName . CONTROLLER_NAME . ACTION_NAME);
-            if (empty($_SESSION[C('ADMIN_AUTH_KEY')])) {
-                if (C('USER_AUTH_TYPE') == 2) {
-                    //加强验证和即时验证模式 更加安全 后台权限修改可以即时生效
-                    //通过数据库进行访问检查
-                    $accessList = self::getAccessList($_SESSION[C('USER_AUTH_KEY')]);
-                } else {
-                    // 如果是管理员或者当前操作已经认证过，无需再次认证
-                    if ($_SESSION[$accessGuid]) {
-                        return true;
-                    }
-                    //登录验证模式，比较登录后保存的权限访问列表
-                    $accessList = $_SESSION['_ACCESS_LIST'];
-                }
-                //判断是否为组件化模式，如果是，验证其全模块名
-                if (!isset($accessList[strtoupper($appName)][strtoupper(CONTROLLER_NAME)][strtoupper(ACTION_NAME)])) {
-                    $_SESSION[$accessGuid] = false;
-                    return false;
-                } else {
-                    $_SESSION[$accessGuid] = true;
-                }
-            } else {
-                //管理员无需认证
-                return true;
-            }
-        }
-        return true;
     }
 
     /**
      * 取得当前认证号的所有权限列表
      * @param integer $authId 用户ID
-     * @access public
+     * @param string $map 条件
+     * @param array $table RBAC表
+     * @return array
      */
-    public static function getAccessList($authId)
+    private function getAccessList($authId, $map = '', $tables = null)
     {
+        if (is_null($tables)) {
+            $prefix = $this->config['RBAC_DB_DSN'] == '' ? C('DB_PREFIX') : '';
+            $tables['role'] = $prefix . $this->config['RBAC_ROLE_TABLE'];
+            $tables['user'] = $prefix . $this->config['RBAC_USER_TABLE'];
+            $tables['access'] = $prefix . $this->config['RBAC_ACCESS_TABLE'];
+            $tables['node'] = $prefix . $this->config['RBAC_NODE_TABLE'];
+        }
         // Db方式权限数据
-        $db    = Db::getInstance(C('RBAC_DB_DSN'));
-        $table = array('role' => C('RBAC_ROLE_TABLE'), 'user' => C('RBAC_USER_TABLE'), 'access' => C('RBAC_ACCESS_TABLE'), 'node' => C('RBAC_NODE_TABLE'));
-        $sql   = "select node.id,node.name from " .
-        $table['role'] . " as role," .
-        $table['user'] . " as user," .
-        $table['access'] . " as access ," .
-        $table['node'] . " as node " .
-        "where user.user_id='{$authId}' and user.role_id=role.id and ( access.role_id=role.id  or (access.role_id=role.pid and role.pid!=0 ) ) and role.status=1 and access.node_id=node.id and node.level=1 and node.status=1";
-        $apps   = $db->query($sql);
-        $access = array();
-        foreach ($apps as $key => $app) {
-            $appId   = $app['id'];
-            $appName = $app['name'];
-            // 读取项目的模块权限
-            $access[strtoupper($appName)] = array();
-            $sql                          = "select node.id,node.name from " .
-            $table['role'] . " as role," .
-            $table['user'] . " as user," .
-            $table['access'] . " as access ," .
-            $table['node'] . " as node " .
-            "where user.user_id='{$authId}' and user.role_id=role.id and ( access.role_id=role.id  or (access.role_id=role.pid and role.pid!=0 ) ) and role.status=1 and access.node_id=node.id and node.level=2 and node.pid={$appId} and node.status=1";
-            $modules = $db->query($sql);
-            // 判断是否存在公共模块的权限
-            $publicAction = array();
-            foreach ($modules as $key => $module) {
-                $moduleId   = $module['id'];
-                $moduleName = $module['name'];
-                if ('PUBLIC' == strtoupper($moduleName)) {
-                    $sql = "select node.id,node.name from " .
-                    $table['role'] . " as role," .
-                    $table['user'] . " as user," .
-                    $table['access'] . " as access ," .
-                    $table['node'] . " as node " .
-                    "where user.user_id='{$authId}' and user.role_id=role.id and ( access.role_id=role.id  or (access.role_id=role.pid and role.pid!=0 ) ) and role.status=1 and access.node_id=node.id and node.level=3 and node.pid={$moduleId} and node.status=1";
-                    $rs = $db->query($sql);
-                    foreach ($rs as $a) {
-                        $publicAction[$a['name']] = $a['id'];
+        $db = Db::getInstance($this->config['RBAC_DB_DSN']);
+        $sql = "select node.id,node.name,node.pid,node.level,node.expression from " .
+            $tables['node'] . " as node join " .
+            $tables['access'] . " as access on node.id=access.node_id join " .
+            $tables['user'] . " as user on access.role_id=user.role_id join " .
+            $tables['role'] . " as role on user.role_id=role.id " .
+            "where user.user_id='{$authId}' and role.status=1 and node.status=1" . $map;
+        $list = $db->query($sql);
+        $result = $access = array();
+        if ($list) {
+            foreach ($list as $v) {
+                if ($v['level'] == 0) {
+                    $result[strtoupper($v['name'])] = $v['expression'];
+                } else {
+                    unset($v['expression']);
+                    $access[$v['level']][$v['id']] = $v;
+                }
+            }
+            foreach ($access[3] as $k => $v) {
+                if (isset($access[2][$v['pid']])) {
+                    $pid = $access[2][$v['pid']]['pid'];
+                    if (isset($access[1][$pid])) {
+                        $array = array();
+                        $array[] = $access[1][$pid]['name'];
+                        $array[] = $access[2][$v['pid']]['name'];
+                        $array[] = $v['name'];
+                        $array = array_map('strtoupper', $array);
+                        $result[$array[0]][$array[1]][$array[2]] = $k;
                     }
-                    unset($modules[$key]);
-                    break;
                 }
             }
-            // 依次读取模块的操作权限
-            foreach ($modules as $key => $module) {
-                $moduleId   = $module['id'];
-                $moduleName = $module['name'];
-                $sql        = "select node.id,node.name from " .
-                $table['role'] . " as role," .
-                $table['user'] . " as user," .
-                $table['access'] . " as access ," .
-                $table['node'] . " as node " .
-                "where user.user_id='{$authId}' and user.role_id=role.id and ( access.role_id=role.id  or (access.role_id=role.pid and role.pid!=0 ) ) and role.status=1 and access.node_id=node.id and node.level=3 and node.pid={$moduleId} and node.status=1";
-                $rs     = $db->query($sql);
-                $action = array();
-                foreach ($rs as $a) {
-                    $action[$a['name']] = $a['id'];
-                }
-                // 和公共模块的操作权限合并
-                $action += $publicAction;
-                $access[strtoupper($appName)][strtoupper($moduleName)] = array_change_key_case($action, CASE_UPPER);
-            }
         }
-        return $access;
-    }
-
-    // 读取模块所属的记录访问权限
-    public static function getModuleAccessList($authId, $module)
-    {
-        // Db方式
-        $db    = Db::getInstance(C('RBAC_DB_DSN'));
-        $table = array('role' => C('RBAC_ROLE_TABLE'), 'user' => C('RBAC_USER_TABLE'), 'access' => C('RBAC_ACCESS_TABLE'));
-        $sql   = "select access.node_id from " .
-        $table['role'] . " as role," .
-        $table['user'] . " as user," .
-        $table['access'] . " as access " .
-        "where user.user_id='{$authId}' and user.role_id=role.id and ( access.role_id=role.id  or (access.role_id=role.pid and role.pid!=0 ) ) and role.status=1 and  access.module='{$module}' and access.status=1";
-        $rs     = $db->query($sql);
-        $access = array();
-        foreach ($rs as $node) {
-            $access[] = $node['node_id'];
-        }
-        return $access;
+        return $result;
     }
 }
