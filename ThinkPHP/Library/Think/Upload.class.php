@@ -114,8 +114,9 @@ class Upload
      * @param  array  $file 文件数组
      * @return array        上传成功后的文件信息
      */
-    public function uploadOne($file)
+    public function uploadOne($file = '')
     {
+        if ($file === '') $file = current($_FILES);
         $info = $this->upload(array($file));
         return $info ? $info[0] : $info;
     }
@@ -179,13 +180,14 @@ class Upload
             }
 
             /* 调用回调函数检测文件是否存在 */
-            $data = call_user_func($this->callback, $file);
-            if ($this->callback && $data) {
-                if (file_exists('.' . $data['path'])) {
-                    $info[$key] = $data;
-                    continue;
-                } elseif ($this->removeTrash) {
-                    call_user_func($this->removeTrash, $data); //删除垃圾据
+            if($this->callback){
+                if ($data = call_user_func($this->callback, $file)) {
+                    if (file_exists('.' . $data['path'])) {
+                        $info[$key] = $data;
+                        continue;
+                    }elseif($this->removeTrash){
+                        call_user_func($this->removeTrash, $data);//删除垃圾据
+                    }
                 }
             }
 
