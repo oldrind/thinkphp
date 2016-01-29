@@ -292,9 +292,6 @@ class  Template
                     $parseStr = $self->parseTemplateName($file);
                     // 替换变量
                     foreach ($array as $k => $v) {
-                        if (0 == strpos($v, '$')) {
-                            $v = ltrim($this->config['tpl_begin'], '\\') . $v . ltrim($this->config['tpl_end'], '\\');
-                        }
                         $parseStr = str_replace('[' . $k . ']', $v, $parseStr);
                     }
                     // 再次对包含文件进行模板分析
@@ -361,7 +358,6 @@ class  Template
      * 替换页面中的literal标签
      * @access private
      * @param  string $content 模板内容
-     * @param  boolean $restore 是否为还原
      * @return void
      */
     private function parseLiteral(&$content, $restore = false)
@@ -369,12 +365,10 @@ class  Template
         $regex = $this->getRegex($restore ? 'restoreliteral' : 'literal');
         if (preg_match_all($regex, $content, $matches, PREG_SET_ORDER)) {
             if (!$restore) {
-                $count = count($this->literal);
                 // 替换literal标签
                 foreach ($matches as $i => $match) {
                     $this->literal[] = substr($match[0], strlen($match[1]), -strlen($match[2]));
-                    $content         = str_replace($match[0], "<!--###literal{$count}###-->", $content);
-                    $count++;
+                    $content         = str_replace($match[0], "<!--###literal{$i}###-->", $content);
                 }
             } else {
                 // 还原literal标签
@@ -852,9 +846,9 @@ class  Template
                 $begin = $this->config['tmpl_begin'];
                 $end   = $this->config['tmpl_end'];
                 if (strlen(ltrim($begin, '\\')) == 1 && strlen(ltrim($end, '\\')) == 1) {
-                    $regex = $begin . '((?:(?:[\$]{1,2}|[\:\~][\$a-wA-w_]|[+]{2}[\$]|[-]{2}[\$])[\w\.\:\[\(\*\/\-\+\%_]|\/[\*\/])(?>[^' . $end . ']*))' . $end;
+                    $regex = $begin . '((?:[\$\:\-\+~][\$a-wA-w_][\w\.\:\[\(\*\/\-\+\%_]|\/[\*\/])(?>[^' . $end . ']*))' . $end;
                 } else {
-                    $regex = $begin . '((?:(?:[\$]{1,2}|[\:\~][\$a-wA-w_]|[+]{2}[\$]|[-]{2}[\$])[\w\.\:\[\(\*\/\-\+\%_]|\/[\*\/])(?>(?:(?!' . $end . ').)*))' . $end;
+                    $regex = $begin . '((?:[\$\:\-\+~][\$a-wA-w_][\w\.\:\[\(\*\/\-\+\%_]|\/[\*\/])(?>(?:(?!' . $end . ').)*))' . $end;
                 }
                 break;
         }
