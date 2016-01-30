@@ -292,6 +292,9 @@ class  Template
                     $parseStr = $self->parseTemplateName($file);
                     // 替换变量
                     foreach ($array as $k => $v) {
+                        if (0 === strpos($v, '$')) {
+                            $v = ltrim($this->config['tmpl_begin'], '\\') . $v . ltrim($this->config['tmpl_end'], '\\');
+                        }
                         $parseStr = str_replace('[' . $k . ']', $v, $parseStr);
                     }
                     // 再次对包含文件进行模板分析
@@ -358,6 +361,7 @@ class  Template
      * 替换页面中的literal标签
      * @access private
      * @param  string $content 模板内容
+     * @param  boolean $restore 是否为还原
      * @return void
      */
     private function parseLiteral(&$content, $restore = false)
@@ -365,18 +369,20 @@ class  Template
         $regex = $this->getRegex($restore ? 'restoreliteral' : 'literal');
         if (preg_match_all($regex, $content, $matches, PREG_SET_ORDER)) {
             if (!$restore) {
+                $count = count($this->literal);
                 // 替换literal标签
                 foreach ($matches as $i => $match) {
                     $this->literal[] = substr($match[0], strlen($match[1]), -strlen($match[2]));
-                    $content         = str_replace($match[0], "<!--###literal{$i}###-->", $content);
+                    $content         = str_replace($match[0], "<!--###literal{$count}###-->", $content);
+                    $count++;
                 }
             } else {
                 // 还原literal标签
                 foreach ($matches as $i => $match) {
                     $content = str_replace($match[0], $this->literal[$i], $content);
                 }
-                // 销毁literal记录
-                unset($this->literal);
+                // 清空literal记录
+                $this->literal = [];
             }
             unset($matches);
         }
@@ -394,7 +400,7 @@ class  Template
         $regex = $this->getRegex('block');
         $array = array();
         if (preg_match_all($regex, $content, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
-            $right = array();
+            $right = $keys = array();
             foreach ($matches as $match) {
                 if (empty($match['name'][0])) {
                     if (!empty($right)) {
@@ -407,6 +413,7 @@ class  Template
                             'content' => substr($content, $start, $len),
                             'end'     => $end,
                         );
+                        $keys[] = $begin['offset'];
                     } else {
                         continue;
                     }
@@ -415,6 +422,8 @@ class  Template
                 }
             }
             unset($right, $matches);
+            // 按block标签在模板中的位置排序
+            array_multisort($keys, $array);
         }
         return $array;
     }
@@ -548,9 +557,8 @@ class  Template
                         break;
                     case '-':
                     case '+':    // 输出计算
-                        $str = substr($str, 1);
                         $this->parseVar($str);
-                        $str = '<?php echo ' . $flag .  $str . '; ?>';
+                        $str = '<?php echo ' . $str . '; ?>';
                         break;
                     case '/':    // 注释标签
                         $flag2 = substr($str, 1, 1);
@@ -837,18 +845,18 @@ class  Template
                     $name = 'name';
                 }
                 if ($single) {
-                    $regex = $begin . $tagName . '\b(?>(?:(?!' . $name . '=).)*)\b' . $name . '=([\'\"])(?<name>[\w\/\.\:@,\\\\]+)\\1(?>[^' . $end . ']*)' . $end;
+                    $regex = $begin . $tagName . '\b(?>(?:(?!' . $name . '=).)*)\b' . $name . '=([\'\"])(?<name>[\w\/\.\:@-,\\\\]+)\\1(?>[^' . $end . ']*)' . $end;
                 } else {
-                    $regex = $begin . $tagName . '\b(?>(?:(?!' . $name . '=).)*)\b' . $name . '=([\'\"])(?<name>[\w\/\.\:@,\\\\]+)\\1(?>(?:(?!' . $end . ').)*)' . $end;
+                    $regex = $begin . $tagName . '\b(?>(?:(?!' . $name . '=).)*)\b' . $name . '=([\'\"])(?<name>[\w\/\.\:@-,\\\\]+)\\1(?>(?:(?!' . $end . ').)*)' . $end;
                 }
                 break;
             case 'tag':
                 $begin = $this->config['tmpl_begin'];
                 $end   = $this->config['tmpl_end'];
                 if (strlen(ltrim($begin, '\\')) == 1 && strlen(ltrim($end, '\\')) == 1) {
-                    $regex = $begin . '((?:[\$\:\-\+~][\$a-wA-w_][\w\.\:\[\(\*\/\-\+\%_]|\/[\*\/])(?>[^' . $end . ']*))' . $end;
+                    $regex = $begin . '((?:[\$]{1,2}[a-wA-w_]|[\:\~][\$a-wA-w_]|[+]{2}[\$][a-wA-w_]|[-]{2}[\$][a-wA-w_]|\/[\*\/])(?>[^' . $end . ']*))' . $end;
                 } else {
-                    $regex = $begin . '((?:[\$\:\-\+~][\$a-wA-w_][\w\.\:\[\(\*\/\-\+\%_]|\/[\*\/])(?>(?:(?!' . $end . ').)*))' . $end;
+                    $regex = $begin . '((?:[\$]{1,2}[a-wA-w_]|[\:\~][\$a-wA-w_]|[+]{2}[\$][a-wA-w_]|[-]{2}[\$][a-wA-w_]|\/[\*\/])(?>(?:(?!' . $end . ').)*))' . $end;
                 }
                 break;
         }

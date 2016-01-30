@@ -21,7 +21,7 @@ class TagLib
      * @var string
      * @access protected
      */
-    protected $xml = '';
+    protected $xml  = '';
     protected $tags = array(); // 标签定义
     /**
      * 标签库名称
@@ -130,12 +130,12 @@ class TagLib
                 // 标签替换 从后向前
                 foreach ($nodes as $pos => $node) {
                     // 对应的标签名
-                    $name = $tags[1][$node['name']];
+                    $name = $node['name'];
                     // 解析标签属性
                     $attrs  = $this->parseAttr($node['begin'][0], $name);
                     $method = '_' . $name;
                     // 读取标签库中对应的标签内容 replace[0]用来替换标签头，replace[1]用来替换标签尾
-                    $replace = explode($break, $this->$method($attrs, $break, $node['name']));
+                    $replace = explode($break, $this->$method($attrs, $break));
                     if (count($replace) > 1) {
                         while ($beginArray) {
                             $begin = end($beginArray);
@@ -167,11 +167,11 @@ class TagLib
             $regex   = $this->getRegex(array_keys($tags[0]), 0);
             $self    = &$this;
             $content = preg_replace_callback($regex, function ($matches) use (&$tags, &$self) {
-                $name = $tags[0][$matches[1]];
+                $name = $matches[1];
                 // 解析标签属性
                 $attrs  = $self->parseAttr($matches[0], $name);
                 $method = '_' . $name;
-                return $self->$method($attrs, '', $matches[1]);
+                return $self->$method($attrs, '');
             }, $content);
         }
         return;
@@ -282,7 +282,7 @@ class TagLib
         if (ini_get('magic_quotes_sybase')) {
             $str = str_replace('\"', '\'', $str);
         }
-        $regex = '/\s+(?>(?<name>\w+)\s*)=(?>\s*)([\"\'])(?<value>(?:(?!\\2).)*)\\2/is';
+        $regex  = '/\s+(?>(?<name>\w+)\s*)=(?>\s*)([\"\'])(?<value>(?:(?!\\2).)*)\\2/is';
         $result = array();
         if (preg_match_all($regex, $str, $matches)) {
             foreach ($matches['name'] as $key => $val) {
@@ -313,8 +313,8 @@ class TagLib
             if (!empty($this->tags[$tag]['expression'])) {
                 static $_taglibs;
                 if (!isset($_taglibs[$tag])) {
-                    $_taglibs[$tag][0] = strlen(ltrim(C('TAGLIB_BEGIN'), '\\') . $tag);
-                    $_taglibs[$tag][1] = strlen(ltrim(C('TAGLIB_END'), '\\'));
+                    $_taglibs[$tag][0] = strlen(ltrim($this->tpl->config['taglib_begin'], '\\') . $tag);
+                    $_taglibs[$tag][1] = strlen(ltrim($this->tpl->config['taglib_end'], '\\'));
                 }
                 $result['expression'] = substr($str, $_taglibs[$tag][0], -$_taglibs[$tag][1]);
                 // 清除自闭合标签尾部/

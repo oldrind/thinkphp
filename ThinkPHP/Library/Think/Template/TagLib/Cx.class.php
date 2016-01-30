@@ -76,6 +76,8 @@ class Cx extends TagLib
         $empty = isset($tag['empty']) ? $tag['empty'] : '';
         $key   = !empty($tag['key']) ? $tag['key'] : 'i';
         $mod   = isset($tag['mod']) ? $tag['mod'] : '2';
+        $offset = !empty($tag['offset']) && is_numeric($tag['offset']) ? intval($tag['offset']) : 0;
+        $length = !empty($tag['length']) && is_numeric($tag['length']) ? intval($tag['length']) : 'null';
         // 允许使用函数设定数据集 <volist name=":fun('arg')" id="vo">{$vo.name}</volist>
         $parseStr = '<?php ';
         $flag     = substr($name, 0, 1);
@@ -86,11 +88,9 @@ class Cx extends TagLib
         } else {
             $name = $this->autoBuildVar($name);
         }
-        $parseStr .= 'if(is_array(' . $name . ')): $' . $key . ' = 0;';
-        if (isset($tag['length']) && '' != $tag['length']) {
-            $parseStr .= ' $__LIST__ = array_slice(' . $name . ',' . $tag['offset'] . ',' . $tag['length'] . ',true);';
-        } elseif (isset($tag['offset']) && '' != $tag['offset']) {
-            $parseStr .= ' $__LIST__ = array_slice(' . $name . ',' . $tag['offset'] . ',null,true);';
+        // 设置了输出数组长度
+        if (0 != $offset || 'null' != $length) {
+            $parseStr .=  '$__LIST__ = array_slice(' . $name . ',' . $offset . ',' . $length . ', true); ';
         } else {
             $parseStr .= ' $__LIST__ = ' . $name . ';';
         }
