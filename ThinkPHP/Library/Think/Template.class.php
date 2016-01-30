@@ -554,7 +554,7 @@ class  Template
                         break;
                     case '-':
                     case '+':    // 输出计算
-                        $str = substr($str, 1);
+                        $str = substr($str, 2);
                         $this->parseVar($str);
                         $str = '<?php echo ' . $flag .  $str . '; ?>';
                         break;
@@ -843,18 +843,18 @@ class  Template
                     $name = 'name';
                 }
                 if ($single) {
-                    $regex = $begin . $tagName . '\b(?>(?:(?!' . $name . '=).)*)\b' . $name . '=([\'\"])(?<name>[\w\/\.\:@,\\\\]+)\\1(?>[^' . $end . ']*)' . $end;
+                    $regex = $begin . $tagName . '\b(?>(?:(?!' . $name . '=).)*)\b' . $name . '=([\'\"])(?<name>[\w\/\.\:@-,\\\\]+)\\1(?>[^' . $end . ']*)' . $end;
                 } else {
-                    $regex = $begin . $tagName . '\b(?>(?:(?!' . $name . '=).)*)\b' . $name . '=([\'\"])(?<name>[\w\/\.\:@,\\\\]+)\\1(?>(?:(?!' . $end . ').)*)' . $end;
+                    $regex = $begin . $tagName . '\b(?>(?:(?!' . $name . '=).)*)\b' . $name . '=([\'\"])(?<name>[\w\/\.\:@-,\\\\]+)\\1(?>(?:(?!' . $end . ').)*)' . $end;
                 }
                 break;
             case 'tag':
                 $begin = $this->config['tmpl_begin'];
                 $end   = $this->config['tmpl_end'];
                 if (strlen(ltrim($begin, '\\')) == 1 && strlen(ltrim($end, '\\')) == 1) {
-                    $regex = $begin . '((?:(?:[\$]{1,2}|[\:\~][\$a-wA-w_]|[+]{2}[\$]|[-]{2}[\$])[\w\.\:\[\(\*\/\-\+\%_]|\/[\*\/])(?>[^' . $end . ']*))' . $end;
+                    $regex = $begin . '((?:[\$]{1,2}[a-wA-w_]|[\:\~][\$a-wA-w_]|[+]{2}[\$][a-wA-w_]|[-]{2}[\$][a-wA-w_]|\/[\*\/])(?>[^' . $end . ']*))' . $end;
                 } else {
-                    $regex = $begin . '((?:(?:[\$]{1,2}|[\:\~][\$a-wA-w_]|[+]{2}[\$]|[-]{2}[\$])[\w\.\:\[\(\*\/\-\+\%_]|\/[\*\/])(?>(?:(?!' . $end . ').)*))' . $end;
+                    $regex = $begin . '((?:[\$]{1,2}[a-wA-w_]|[\:\~][\$a-wA-w_]|[+]{2}[\$][a-wA-w_]|[-]{2}[\$][a-wA-w_]|\/[\*\/])(?>(?:(?!' . $end . ').)*))' . $end;
                 }
                 break;
         }
