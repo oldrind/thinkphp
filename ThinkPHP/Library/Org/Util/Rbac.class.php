@@ -136,7 +136,7 @@ class Rbac
      * @param integer $authId 用户id
      * @param boolean $admin 是否为超管
      * @param array $config 配置参数
-     * @return class
+     * @return object
      */
     public static function getInstance($authId, $admin = false, $config = null)
     {
