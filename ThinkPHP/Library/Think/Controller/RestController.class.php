@@ -107,6 +107,7 @@ class RestController extends Controller
             return false;
         }
         $type = array(
+            'html' => 'text/html,application/xhtml+xml,*/*',
             'xml'  => 'application/xml,text/xml,application/x-xml',
             'json' => 'application/json,text/x-json,application/jsonrequest,text/json',
             'js'   => 'text/javascript,application/javascript,application/x-javascript',
@@ -120,7 +121,6 @@ class RestController extends Controller
             'jpg'  => 'image/jpg,image/jpeg,image/pjpeg',
             'gif'  => 'image/gif',
             'csv'  => 'text/csv',
-            'html' => 'text/html,application/xhtml+xml,*/*',
         );
 
         foreach ($type as $key => $val) {
